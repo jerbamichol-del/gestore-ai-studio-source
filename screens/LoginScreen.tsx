@@ -16,7 +16,6 @@ import {
   setBiometricsOptOut,
 } from '../services/biometrics';
 
-// helper snooze/lock dal service (li importo a runtime per evitare cicli in build)
 type BioHelpers = {
   isBiometricSnoozed: () => boolean;
   setBiometricSnooze: () => void;
@@ -26,9 +25,17 @@ type BioHelpers = {
 // lock di sessione per evitare doppio avvio (StrictMode / re-render)
 const BIO_AUTOPROMPT_LOCK_KEY = 'bio.autoprompt.lock';
 const hasAutoPromptLock = () => {
-  try { return sessionStorage.getItem(BIO_AUTOPROMPT_LOCK_KEY) === '1'; } catch { return false; }
+  try {
+    return sessionStorage.getItem(BIO_AUTOPROMPT_LOCK_KEY) === '1';
+  } catch {
+    return false;
+  }
 };
-const setAutoPromptLock = () => { try { sessionStorage.setItem(BIO_AUTOPROMPT_LOCK_KEY, '1'); } catch {} };
+const setAutoPromptLock = () => {
+  try {
+    sessionStorage.setItem(BIO_AUTOPROMPT_LOCK_KEY, '1');
+  } catch {}
+};
 
 interface LoginScreenProps {
   onLoginSuccess: (token: string, email: string) => void;
@@ -58,20 +65,41 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   // verifica stato biometria quando entri nella schermata PIN
   useEffect(() => {
     let mounted = true;
+
     (async () => {
       const supported = await isBiometricsAvailable();
       const enabled = isBiometricsEnabled();
-      const offer = await shouldOfferBiometricEnable();
+
+      let shouldShow = false;
+
+      if (supported) {
+        if (enabled) {
+          // già attivata → mostra direttamente "Accedi con impronta"
+          shouldShow = true;
+        } else if (activeEmail) {
+          // decide se proporre l'abilitazione per questo utente
+          try {
+            const offer = await shouldOfferBiometricEnable(activeEmail);
+            shouldShow = offer;
+          } catch {
+            shouldShow = false;
+          }
+        }
+      }
+
       if (!mounted) return;
+
       setBioSupported(supported);
       setBioEnabled(enabled);
-      setShowEnableBox(offer);
+      setShowEnableBox(shouldShow);
     })();
-    return () => { mounted = false; };
+
+    return () => {
+      mounted = false;
+    };
   }, [activeEmail]);
 
   // Autoprompt biometrico: 1 solo tentativo totale per sessione.
-  // Gli "altri 2 tentativi" li gestisce il foglio di sistema dentro lo stesso prompt.
   useEffect(() => {
     if (!activeEmail) return;
     if (!bioSupported || !bioEnabled) return;
@@ -79,7 +107,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     if (hasAutoPromptLock()) return;
 
     autoStartedRef.current = true;
-    setAutoPromptLock(); // blocca eventuale secondo run (StrictMode)
+    setAutoPromptLock();
 
     (async () => {
       const { isBiometricSnoozed, setBiometricSnooze, clearBiometricSnooze } =
@@ -89,7 +117,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
       try {
         setBioBusy(true);
-        const ok = await unlockWithBiometric('Sblocca con impronta / FaceID'); // timeout 60s gestisce retry interno
+        const ok = await unlockWithBiometric('Sblocca con impronta / FaceID');
         setBioBusy(false);
         if (ok) {
           clearBiometricSnooze();
@@ -97,13 +125,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         }
       } catch (err: any) {
         setBioBusy(false);
-        // Qualsiasi annullo/timeout/chiusura: metti in snooze e non ripresentare
         const name = err?.name || '';
-        const msg  = String(err?.message || '');
+        const msg = String(err?.message || '');
         if (name === 'NotAllowedError' || name === 'AbortError' || /timeout/i.test(msg)) {
           setBiometricSnooze();
         }
-        // resta su PIN, nessun altro prompt automatico
+        // resta sulla schermata PIN
       }
     })();
   }, [activeEmail, bioSupported, bioEnabled, onLoginSuccess]);
@@ -140,44 +167,59 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
-  // Abilita ora (box interno) — tenta 1 prompt manuale; se annulla, niente ripresentazione
-  const enableBiometricsNow = async () => {
+  const loginWithBiometrics = async () => {
+    if (!activeEmail) return;
     try {
       setBioBusy(true);
-      await registerBiometric('Profilo locale');
-      setBioEnabled(true);
-      setShowEnableBox(false);
+      const { clearBiometricSnooze, setBiometricSnooze } =
+        (await import('../services/biometrics')) as unknown as BioHelpers;
+
+      // login richiesto esplicitamente → azzero lo snooze
+      clearBiometricSnooze();
+
+      const ok = await unlockWithBiometric('Sblocca con impronta / FaceID');
       setBioBusy(false);
 
-      // Tentativo manuale singolo subito dopo l’abilitazione
-      try {
-        const { clearBiometricSnooze, setBiometricSnooze } =
-          (await import('../services/biometrics')) as unknown as BioHelpers;
-        clearBiometricSnooze(); // consenti il prompt adesso
-        const ok = await unlockWithBiometric('Sblocca con impronta / FaceID');
-        if (ok && activeEmail) {
-          onLoginSuccess('biometric-local', activeEmail);
-          return;
-        }
-      } catch (err: any) {
-        const name = err?.name || '';
-        const msg  = String(err?.message || '');
-        if (name === 'NotAllowedError' || name === 'AbortError' || /timeout/i.test(msg)) {
-          const { setBiometricSnooze } =
-            (await import('../services/biometrics')) as unknown as BioHelpers;
-          setBiometricSnooze();
-        }
-        // resta su PIN
+      if (ok) {
+        onLoginSuccess('biometric-local', activeEmail);
       }
+    } catch (err) {
+      setBioBusy(false);
+      console.error('Login biometrico fallito', err);
+      const name = (err as any)?.name || '';
+      const msg = String((err as any)?.message || '');
+      if (name === 'NotAllowedError' || name === 'AbortError' || /timeout/i.test(msg)) {
+        const { setBiometricSnooze } =
+          (await import('../services/biometrics')) as unknown as BioHelpers;
+        setBiometricSnooze();
+      }
+    }
+  };
+
+  const enableBiometricsNow = async () => {
+    if (!activeEmail) return;
+    try {
+      setBioBusy(true);
+      // registra credenziali biometriche per questo profilo
+      await registerBiometric('Profilo locale');
+      setBioEnabled(true);
+      setBioBusy(false);
+
+      // Tentativo manuale subito dopo l’abilitazione
+      await loginWithBiometrics();
     } catch {
       setBioBusy(false);
       // se annulla in registrazione, resta tutto com’è
     }
   };
 
-  // Non ora (non riproporre il box)
-  const denyBiometricsOffer = () => {
-    setBiometricsOptOut(true);
+  const optOutBiometrics = async () => {
+    if (!activeEmail) return;
+    try {
+      await setBiometricsOptOut(activeEmail);
+    } catch {
+      // se fallisce non è la fine del mondo
+    }
     setShowEnableBox(false);
   };
 
@@ -186,7 +228,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setPin('');
     setError(null);
     autoStartedRef.current = false;
-    // non resetto il lock: in questa sessione niente altro auto-prompt
+    // non resetto il lock: niente altro auto-prompt in questa sessione
   };
 
   const renderContent = () => {
@@ -236,45 +278,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {isLoading ? (
             <SpinnerIcon className="w-6 h-6 text-indigo-600" />
           ) : (
-            error || (bioEnabled && bioSupported ? 'Puoi anche usare l’impronta.' : 'Inserisci il tuo PIN di 4 cifre.')
+            error ||
+            (bioEnabled && bioSupported
+              ? 'Puoi anche usare l’impronta.'
+              : 'Inserisci il tuo PIN di 4 cifre.')
           )}
         </p>
 
         <PinInput pin={pin} onPinChange={setPin} />
 
-        {/* Box abilitazione biometria (solo se disponibile, non abilitata, non opt-out) */}
-        {showEnableBox && (
-          <div className="mt-4 p-3 rounded-lg border border-slate-200 bg-slate-50 text-left">
-            <p className="text-sm text-slate-700">
-              Vuoi abilitare lo sblocco con impronta / FaceID su questo dispositivo?
-            </p>
-            <div className="flex gap-3 mt-2">
-              <button
-                onClick={enableBiometricsNow}
-                disabled={bioBusy}
-                className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-indigo-300"
-              >
-                {bioBusy ? 'Attivo…' : 'Abilita ora'}
-              </button>
-              <button
-                onClick={denyBiometricsOffer}
-                disabled={bioBusy}
-                className="px-4 py-2 text-sm font-semibold text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-100"
-              >
-                Non ora
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="mt-4 flex flex-col sm:flex-row justify-between items-center gap-2">
-          <button
-            onClick={handleSwitchUser}
-            className="text-sm font-semibold text-slate-500 hover:text-slate-800"
-          >
-            Cambia Utente
-          </button>
-          <div className="flex gap-4">
+        <div className="mt-4 flex flex-col items-center justify-center gap-y-3">
+          <div className="flex w-full items-center justify-between">
+            <button
+              onClick={handleSwitchUser}
+              className="text-sm font-semibold text-indigo-600 hover:text-indigo-500"
+            >
+              Cambia Utente
+            </button>
             <button
               onClick={onGoToForgotPassword}
               className="text-sm font-semibold text-indigo-600 hover:text-indigo-500"
@@ -282,6 +302,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               PIN Dimenticato?
             </button>
           </div>
+
+          {showEnableBox && (
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <button
+                onClick={bioEnabled ? loginWithBiometrics : enableBiometricsNow}
+                disabled={bioBusy}
+                className="text-sm font-semibold text-indigo-600 hover:text-indigo-500 disabled:opacity-60"
+              >
+                {bioBusy
+                  ? 'Attendere...'
+                  : bioEnabled
+                  ? 'Accedi con impronta'
+                  : 'Abilita impronta'}
+              </button>
+
+              {!bioEnabled && (
+                <button
+                  type="button"
+                  onClick={optOutBiometrics}
+                  className="text-xs text-slate-400 hover:text-slate-500"
+                >
+                  Non ora
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
