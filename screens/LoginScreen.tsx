@@ -225,7 +225,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
     try {
       setBioBusy(true);
-      const { clearBiometricSnoozed, clearBiometricSnooze, setBiometricSnooze } =
+      // FIX: Removed typo 'clearBiometricSnoozed' and duplicate 'clearBiometricSnooze'
+      const { clearBiometricSnooze, setBiometricSnooze } =
         (await import('../services/biometrics')) as unknown as BioHelpers;
 
       // login richiesto esplicitamente → azzero lo snooze

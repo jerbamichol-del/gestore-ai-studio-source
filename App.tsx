@@ -237,7 +237,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
     today.setHours(0, 0, 0, 0);
 
     const newExpenses: Expense[] = [];
-    const updatedTemplates: Expense[] = [];
+    const templatesToUpdate: Expense[] = [];
 
     recurringExpenses.forEach(template => {
       if (!template.date) {
@@ -277,6 +277,8 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         const nextDueDateString = toYYYYMMDD(nextDue);
         const instanceExists = expenses.some(
           exp => exp.recurringExpenseId === template.id && exp.date === nextDueDateString,
+        ) || newExpenses.some(
+          exp => exp.recurringExpenseId === template.id && exp.date === nextDueDateString,
         );
 
         if (!instanceExists) {
@@ -296,19 +298,19 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       }
 
       if (updatedTemplate.lastGeneratedDate && updatedTemplate.lastGeneratedDate !== template.lastGeneratedDate) {
-        updatedTemplates.push(updatedTemplate);
+        templatesToUpdate.push(updatedTemplate);
       }
     });
 
     if (newExpenses.length > 0) {
       setExpenses(prev => [...newExpenses, ...prev]);
     }
-    if (updatedTemplates.length > 0) {
+    if (templatesToUpdate.length > 0) {
       setRecurringExpenses(prev =>
-        prev.map(t => updatedTemplates.find(ut => ut.id === t.id) || t),
+        prev.map(t => templatesToUpdate.find(ut => ut.id === t.id) || t),
       );
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [recurringExpenses, expenses, setExpenses, setRecurringExpenses]);
 
   // ================== Success indicator ==================
   const triggerSuccessIndicator = useCallback(() => {
