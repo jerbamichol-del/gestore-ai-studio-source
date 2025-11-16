@@ -12,6 +12,7 @@ jobs:
     env:
       OLD_REPO: jerbamichol-del/gestore
       OLD_BRANCH: main
+      OLD_REPO_TOKEN: ${{ secrets.OLD_REPO_TOKEN }}
 
     steps:
       - name: Checkout sorgente (repo nuova, quella di AI Studio)
@@ -21,7 +22,6 @@ jobs:
         run: |
           git config --global user.name "ai-studio-mirror"
           git config --global user.email "ai-studio-mirror@users.noreply.github.com"
-
           git clone https://x-access-token:${OLD_REPO_TOKEN}@github.com/${OLD_REPO}.git old-repo
 
       - name: Copia file nella repo vecchia (senza toccare .github)
@@ -41,5 +41,3 @@ jobs:
           else
             echo "Nessuna modifica da sincronizzare."
           fi
-    env:
-      OLD_REPO_TOKEN: ${{ secrets.OLD_REPO_TOKEN }}
