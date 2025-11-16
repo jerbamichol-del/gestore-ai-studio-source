@@ -213,6 +213,7 @@ const RecurringExpensesScreen: React.FC<RecurringExpensesScreenProps> = ({ recur
   const [openItemId, setOpenItemId] = useState<string | null>(null);
   const [expenseToDeleteId, setExpenseToDeleteId] = useState<string | null>(null);
   const [isConfirmDeleteModalOpen, setIsConfirmDeleteModalOpen] = useState(false);
+  const autoCloseRef = useRef<number | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setIsAnimatingIn(true), 10);
@@ -224,6 +225,16 @@ const RecurringExpensesScreen: React.FC<RecurringExpensesScreenProps> = ({ recur
       setOpenItemId(null);
     }
   }, [isAnimatingIn, openItemId]);
+
+  useEffect(() => {
+    if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
+    if (openItemId && !isConfirmDeleteModalOpen) {
+      autoCloseRef.current = window.setTimeout(() => setOpenItemId(null), 5000);
+    }
+    return () => {
+      if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
+    };
+  }, [openItemId, isConfirmDeleteModalOpen]);
 
   const handleClose = () => {
       setOpenItemId(null);

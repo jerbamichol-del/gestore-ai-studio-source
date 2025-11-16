@@ -44,6 +44,9 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({
   const itemRef = useRef<HTMLDivElement>(null);
   const tapBridge = useTapBridge();
 
+  const isRecurringInstance = !!expense.recurringExpenseId;
+  const itemBgClass = isRecurringInstance ? 'bg-amber-50' : 'bg-white';
+
   const dragState = useRef({
     isDragging: false,
     isLocked: false,
@@ -190,7 +193,7 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({
   };
 
   return (
-    <div className="relative bg-white overflow-hidden">
+    <div className={`relative ${itemBgClass} overflow-hidden`}>
       <div className="absolute top-0 right-0 h-full flex items-center z-0">
         <button
           onClick={() => onDelete(expense.id)}
@@ -210,9 +213,14 @@ const ExpenseItem: React.FC<ExpenseItemProps> = ({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onClick={handleClick}
-        className="relative flex items-center gap-4 py-3 px-4 bg-white z-10 cursor-pointer"
+        className={`relative flex items-center gap-4 py-3 px-4 ${itemBgClass} z-10 cursor-pointer`}
         style={{ touchAction: 'pan-y' }}
       >
+        {isRecurringInstance && (
+          <span className="absolute top-1.5 right-1.5 w-5 h-5 bg-amber-200 text-amber-800 text-xs font-bold rounded-full flex items-center justify-center border-2 border-amber-50" title="Spesa Ricorrente">
+            R
+          </span>
+        )}
         <span
           className={`w-10 h-10 rounded-xl flex-shrink-0 flex items-center justify-center ${style.bgColor}`}
         >
