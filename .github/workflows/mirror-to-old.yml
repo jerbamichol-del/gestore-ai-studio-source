@@ -1,0 +1,45 @@
+name: Mirror su gestore (repo vecchia)
+
+on:
+  push:
+    branches:
+      - main  # branch della NUOVA repo usata da AI Studio
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    env:
+      OLD_REPO: jerbamichol-del/gestore
+      OLD_BRANCH: main
+
+    steps:
+      - name: Checkout sorgente (repo nuova, quella di AI Studio)
+        uses: actions/checkout@v4
+
+      - name: Clona repo vecchia (gestore)
+        run: |
+          git config --global user.name "ai-studio-mirror"
+          git config --global user.email "ai-studio-mirror@users.noreply.github.com"
+
+          git clone https://x-access-token:${OLD_REPO_TOKEN}@github.com/${OLD_REPO}.git old-repo
+
+      - name: Copia file nella repo vecchia (senza toccare .github)
+        run: |
+          rsync -av --delete \
+            --exclude=".git" \
+            --exclude=".github" \
+            ./ old-repo/
+
+      - name: Commit & push sulla repo vecchia
+        working-directory: old-repo
+        run: |
+          if git status --porcelain | grep .; then
+            git add .
+            git commit -m "Mirror da repo AI Studio"
+            git push origin ${OLD_BRANCH}
+          else
+            echo "Nessuna modifica da sincronizzare."
+          fi
+    env:
+      OLD_REPO_TOKEN: ${{ secrets.OLD_REPO_TOKEN }}
