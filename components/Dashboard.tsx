@@ -210,7 +210,7 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, recurringExpenses, onLo
                             className="flex items-center justify-center py-2 px-3 text-center font-semibold text-slate-900 bg-amber-100 rounded-xl hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all border border-amber-400"
                             {...tapBridge}
                         >
-                            <span className="text-sm">Spese Programmate</span>
+                            <span className="text-sm">S. Programmate</span>
                         </button>
 
                         <button
