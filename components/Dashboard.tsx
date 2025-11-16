@@ -52,12 +52,45 @@ const renderActiveShape = (props: any) => {
 
 interface DashboardProps {
   expenses: Expense[];
+  recurringExpenses: Expense[];
   onLogout: () => void;
   onNavigateToRecurring: () => void;
   onNavigateToHistory: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToRecurring, onNavigateToHistory }) => {
+const parseLocalYYYYMMDD = (s: string): Date => {
+  const p = s.split('-').map(Number);
+  return new Date(p[0], p[1] - 1, p[2]);
+};
+
+const toYYYYMMDD = (date: Date) => date.toISOString().split('T')[0];
+
+const calculateNextDueDate = (template: Expense, fromDate: Date): Date | null => {
+  if (template.frequency !== 'recurring' || !template.recurrence) return null;
+  const interval = template.recurrenceInterval || 1;
+  const nextDate = new Date(fromDate);
+
+  switch (template.recurrence) {
+    case 'daily':
+      nextDate.setDate(nextDate.getDate() + interval);
+      break;
+    case 'weekly':
+      nextDate.setDate(nextDate.getDate() + 7 * interval);
+      break;
+    case 'monthly':
+      nextDate.setMonth(nextDate.getMonth() + interval);
+      break;
+    case 'yearly':
+      nextDate.setFullYear(nextDate.getFullYear() + interval);
+      break;
+    default:
+      return null;
+  }
+  return nextDate;
+};
+
+
+const Dashboard: React.FC<DashboardProps> = ({ expenses, recurringExpenses, onLogout, onNavigateToRecurring, onNavigateToHistory }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const tapBridge = useTapBridge();
   const activeIndex = selectedIndex;
@@ -71,18 +104,56 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
     setSelectedIndex(null);
   };
 
-  const { totalExpenses, dailyTotal, categoryData } = useMemo(() => {
+  const { totalExpenses, dailyTotal, categoryData, recurringCountThisMonth } = useMemo(() => {
     const validExpenses = expenses.filter(e => e.amount != null && !isNaN(Number(e.amount)));
     
-    const total = validExpenses.reduce((acc, expense) => acc + Number(expense.amount), 0);
-    
-    const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
+    const now = new Date();
+
+    const todayString = now.toISOString().split('T')[0];
     const daily = validExpenses
         .filter(expense => expense.date === todayString)
         .reduce((acc, expense) => acc + Number(expense.amount), 0);
         
-    const categoryTotals = validExpenses.reduce((acc: Record<string, number>, expense) => {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    const currentMonthExpenses = validExpenses.filter(e => {
+        const expenseDate = parseLocalYYYYMMDD(e.date);
+        return expenseDate >= startOfMonth && expenseDate <= endOfMonth;
+    });
+        
+    const total = currentMonthExpenses.reduce((acc, expense) => acc + Number(expense.amount), 0);
+    
+    let recurringCount = 0;
+    recurringExpenses.forEach(template => {
+        if (!template.date) return;
+
+        let nextDue = parseLocalYYYYMMDD(template.date);
+        const totalGenerated = expenses.filter(e => e.recurringExpenseId === template.id).length;
+        let generatedThisRun = 0;
+
+        while (nextDue) {
+            if (nextDue > endOfMonth) {
+                break;
+            }
+
+            if (template.recurrenceEndType === 'date' && template.recurrenceEndDate && toYYYYMMDD(nextDue) > template.recurrenceEndDate) {
+                break;
+            }
+            if (template.recurrenceEndType === 'count' && template.recurrenceCount && (totalGenerated + generatedThisRun) >= template.recurrenceCount) {
+                break;
+            }
+
+            if (nextDue >= startOfMonth) {
+                recurringCount++;
+                generatedThisRun++;
+            }
+            
+            nextDue = calculateNextDueDate(template, nextDue);
+        }
+    });
+        
+    const categoryTotals = currentMonthExpenses.reduce((acc: Record<string, number>, expense) => {
       const category = expense.category || 'Altro';
       acc[category] = (acc[category] || 0) + Number(expense.amount);
       return acc;
@@ -95,9 +166,10 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
     return { 
         totalExpenses: total, 
         dailyTotal: daily,
-        categoryData: sortedCategoryData
+        categoryData: sortedCategoryData,
+        recurringCountThisMonth: recurringCount
     };
-  }, [expenses]);
+  }, [expenses, recurringExpenses]);
   
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -106,7 +178,7 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
                 <div>
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-2">
-                            <h3 className="text-xl font-bold text-slate-700">Spesa Totale</h3>
+                            <h3 className="text-xl font-bold text-slate-700">Spesa del Mese</h3>
                         </div>
                         <button
                             onClick={onLogout}
@@ -117,7 +189,14 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
                             <LockClosedIcon className="w-6 h-6" />
                         </button>
                     </div>
-                    <p className="text-4xl font-extrabold text-indigo-600">{formatCurrency(totalExpenses)}</p>
+                    <div className="flex justify-between items-baseline">
+                        <p className="text-4xl font-extrabold text-indigo-600">{formatCurrency(totalExpenses)}</p>
+                        {recurringCountThisMonth > 0 && (
+                            <span className="text-base font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg" title={`${recurringCountThisMonth} spese programmate previste questo mese`}>
+                                {recurringCountThisMonth} P
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-slate-200">
                     <div>
@@ -131,7 +210,7 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
                             className="flex items-center justify-center py-2 px-3 text-center font-semibold text-slate-900 bg-amber-100 rounded-xl hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all border border-amber-400"
                             {...tapBridge}
                         >
-                            <span className="text-sm">Spese Ricorrenti</span>
+                            <span className="text-sm">Spese Programmate</span>
                         </button>
 
                         <button
@@ -202,7 +281,7 @@ const Dashboard: React.FC<DashboardProps> = ({ expenses, onLogout, onNavigateToR
                     </ResponsiveContainer>
                     {activeIndex === null && (
                         <div className="absolute inset-0 flex flex-col justify-center items-center pointer-events-none">
-                            <span className="text-slate-500 text-sm">Spesa Totale</span>
+                            <span className="text-slate-500 text-sm">Totale Mese</span>
                             <span className="text-2xl font-extrabold text-slate-800 mt-1">
                                 {formatCurrency(totalExpenses)}
                             </span>

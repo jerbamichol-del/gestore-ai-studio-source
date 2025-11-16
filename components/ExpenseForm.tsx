@@ -480,7 +480,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
   const frequencyOptions = [
     { value: 'none', label: 'Nessuna' },
     { value: 'single', label: 'Singolo' },
-    { value: 'recurring', label: 'Ricorrente' },
+    { value: 'recurring', label: 'Programmata' },
   ];
 
   const isSubcategoryDisabled = !formData.category || formData.category === 'Altro' || subcategoryOptions.length === 0;
@@ -654,7 +654,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
                             className="w-full flex items-center justify-between text-left gap-2 px-3 py-2.5 text-base rounded-lg border shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors bg-white border-slate-300 text-slate-800 hover:bg-slate-50"
                         >
                           <span className="truncate flex-1 capitalize">
-                            {isSingleRecurring ? 'Singolo' : formData.frequency !== 'recurring' ? 'Nessuna' : 'Ricorrente'}
+                            {isSingleRecurring ? 'Singolo' : formData.frequency !== 'recurring' ? 'Nessuna' : 'Programmata'}
                           </span>
                           <ChevronDownIcon className="w-5 h-5 text-slate-500" />
                         </button>

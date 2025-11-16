@@ -231,7 +231,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [showSuccessIndicator, setShowSuccessIndicator] = useState(false);
   const successIndicatorTimerRef = useRef<number | null>(null);
 
-  // ================== Generazione spese ricorrenti ==================
+  // ================== Generazione spese programmate ==================
   useEffect(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -493,7 +493,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       data.id === editingRecurringExpense.id &&
       data.frequency !== 'recurring'
     ) {
-      // convertita da ricorrente a singola
+      // convertita da programmata a singola
       setRecurringExpenses(prev => prev.filter(e => e.id !== editingRecurringExpense.id));
 
       const newSingleExpenseData: Omit<Expense, 'id'> = {
@@ -568,7 +568,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
   const deleteRecurringExpense = (id: string) => {
     setRecurringExpenses(prev => prev.filter(e => e.id !== id));
-    setToast({ message: 'Spesa ricorrente eliminata.', type: 'info' });
+    setToast({ message: 'Spesa programmata eliminata.', type: 'info' });
   };
 
   // ================== Immagini / AI ==================
@@ -692,6 +692,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         <div className="w-full h-full overflow-y-auto space-y-6" style={{ touchAction: 'pan-y' }}>
           <Dashboard
             expenses={expenses}
+            recurringExpenses={recurringExpenses}
             onLogout={onLogout}
             onNavigateToRecurring={() => setIsRecurringScreenOpen(true)}
             onNavigateToHistory={() => setIsHistoryScreenOpen(true)}
@@ -872,6 +873,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       {isRecurringScreenOpen && (
         <RecurringExpensesScreen
           recurringExpenses={recurringExpenses}
+          expenses={expenses}
           accounts={accounts}
           onClose={() => { setIsRecurringScreenOpen(false); }}
           onEdit={openRecurringEditForm}
