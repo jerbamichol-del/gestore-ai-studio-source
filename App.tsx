@@ -119,6 +119,83 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
   const [recurringExpenses, setRecurringExpenses] = useLocalStorage<Expense[]>('recurring_expenses_v1', []);
   const [accounts, setAccounts] = useLocalStorage<Account[]>('accounts_v1', DEFAULT_ACCOUNTS);
 
+  // ================== Migrazione dati localStorage (vecchie chiavi) ==================
+  const hasRunMigrationRef = useRef(false);
+
+  useEffect(() => {
+    if (hasRunMigrationRef.current) return;
+    hasRunMigrationRef.current = true;
+
+    if (typeof window === 'undefined') return;
+
+    try {
+      // Migra SPESE se la chiave nuova è vuota
+      if (!expenses || expenses.length === 0) {
+        const legacyExpenseKeys = ['expenses_v1', 'expenses', 'spese', 'spese_v1'];
+
+        for (const key of legacyExpenseKeys) {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('[MIGRAZIONE] Trovate spese su', key, '→ le copio in expenses_v2');
+              setExpenses(parsed as Expense[]);
+              break;
+            }
+          } catch (e) {
+            console.warn('[MIGRAZIONE] Errore leggendo', key, e);
+          }
+        }
+      }
+
+      // Migra CONTI se la chiave nuova è vuota o default
+      if (!accounts || accounts.length === 0 || accounts === DEFAULT_ACCOUNTS) {
+        const legacyAccountKeys = ['accounts', 'conti'];
+
+        for (const key of legacyAccountKeys) {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('[MIGRAZIONE] Trovati conti su', key, '→ li copio in accounts_v1');
+              setAccounts(parsed as Account[]);
+              break;
+            }
+          } catch (e) {
+            console.warn('[MIGRAZIONE] Errore leggendo', key, e);
+          }
+        }
+      }
+
+      // Migra SPESE RICORRENTI se la chiave nuova è vuota
+      if (!recurringExpenses || recurringExpenses.length === 0) {
+        const legacyRecurringKeys = ['recurring_expenses', 'ricorrenti', 'recurring'];
+
+        for (const key of legacyRecurringKeys) {
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              console.log('[MIGRAZIONE] Trovate ricorrenti su', key, '→ le copio in recurring_expenses_v1');
+              setRecurringExpenses(parsed as Expense[]);
+              break;
+            }
+          } catch (e) {
+            console.warn('[MIGRAZIONE] Errore leggendo', key, e);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[MIGRAZIONE] Errore generale di migrazione dati locali', err);
+    }
+  }, [expenses, accounts, recurringExpenses, setExpenses, setAccounts, setRecurringExpenses]);
+
   // Modal States
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isCalculatorContainerOpen, setIsCalculatorContainerOpen] = useState(false);
@@ -610,24 +687,24 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
       </div>
 
       <main className={`flex-grow bg-slate-100`}>
-          <div className="w-full h-full overflow-y-auto space-y-6" style={{ touchAction: 'pan-y' }}>
-            <Dashboard
-              expenses={expenses}
-              onLogout={onLogout}
-              onNavigateToRecurring={() => setIsRecurringScreenOpen(true)}
-              onNavigateToHistory={() => setIsHistoryScreenOpen(true)}
-            />
-            <PendingImages
-              images={pendingImages}
-              onAnalyze={image => handleAnalyzeImage(image, true)}
-              onDelete={async id => {
-                await deleteImageFromQueue(id);
-                refreshPendingImages();
-              }}
-              isOnline={isOnline}
-              syncingImageId={syncingImageId}
-            />
-          </div>
+        <div className="w-full h-full overflow-y-auto space-y-6" style={{ touchAction: 'pan-y' }}>
+          <Dashboard
+            expenses={expenses}
+            onLogout={onLogout}
+            onNavigateToRecurring={() => setIsRecurringScreenOpen(true)}
+            onNavigateToHistory={() => setIsHistoryScreenOpen(true)}
+          />
+          <PendingImages
+            images={pendingImages}
+            onAnalyze={image => handleAnalyzeImage(image, true)}
+            onDelete={async id => {
+              await deleteImageFromQueue(id);
+              refreshPendingImages();
+            }}
+            isOnline={isOnline}
+            syncingImageId={syncingImageId}
+          />
+        </div>
       </main>
 
       {!isCalculatorContainerOpen && (
@@ -775,7 +852,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         accounts={accounts}
         onConfirm={handleMultipleExpensesSubmit}
       />
-      
+
       {isHistoryScreenOpen && (
         <HistoryScreen
           expenses={expenses}
@@ -799,7 +876,7 @@ const App: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           onDelete={deleteRecurringExpense}
         />
       )}
-      
+
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
