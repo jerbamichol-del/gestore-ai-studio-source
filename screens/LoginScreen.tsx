@@ -37,6 +37,9 @@ const setAutoPromptLock = () => {
   } catch {}
 };
 
+// email usata con la biometria (per auto-prompt anche sulla schermata email)
+const BIOMETRIC_LAST_EMAIL_KEY = 'bio.last_email';
+
 interface LoginScreenProps {
   onLoginSuccess: (token: string, email: string) => void;
   onGoToRegister: () => void;
@@ -50,7 +53,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   onGoToForgotPassword,
   onGoToForgotEmail,
 }) => {
-  const [activeEmail, setActiveEmail] = useLocalStorage<string | null>('last_active_user_email', null);
+  const [activeEmail, setActiveEmail] = useLocalStorage<string | null>(
+    'last_active_user_email',
+    null,
+  );
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,7 +68,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const [bioBusy, setBioBusy] = useState(false);
   const autoStartedRef = useRef(false);
 
-  // verifica stato biometria quando entri nella schermata PIN
+  // email salvata assieme alla biometria (es. da un login precedente)
+  const [biometricEmail, setBiometricEmail] = useState<string | null>(null);
+
+  // carica/stabilisce l'email da usare per la biometria
+  useEffect(() => {
+    // se abbiamo già un utente attivo, quella è l'email biometrica
+    if (activeEmail) {
+      setBiometricEmail(activeEmail);
+      return;
+    }
+
+    // siamo sulla schermata email → proviamo a leggere l'ultima email biometrica salvata
+    try {
+      if (typeof window === 'undefined') return;
+      const raw = window.localStorage.getItem(BIOMETRIC_LAST_EMAIL_KEY);
+      if (!raw || raw === 'null' || raw === 'undefined') {
+        setBiometricEmail(null);
+      } else {
+        setBiometricEmail(raw);
+      }
+    } catch {
+      setBiometricEmail(null);
+    }
+  }, [activeEmail]);
+
+  // verifica stato biometria (supporto / enabled / se mostrare il box)
   useEffect(() => {
     let mounted = true;
 
@@ -74,12 +105,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
       if (supported) {
         if (enabled) {
-          // già attivata → mostra direttamente "Accedi con impronta"
+          // già attivata → mostra direttamente il pulsante impronta
           shouldShow = true;
         } else if (activeEmail) {
-          // decide se proporre l'abilitazione per questo utente
+          // decide se proporre l'abilitazione (funzione senza argomenti)
           try {
-            // FIX: The function `shouldOfferBiometricEnable` does not take any arguments.
             const offer = await shouldOfferBiometricEnable();
             shouldShow = offer;
           } catch {
@@ -100,9 +130,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     };
   }, [activeEmail]);
 
+  // email effettiva da usare per l'auto-prompt (PIN o schermata email)
+  const autoPromptEmail = activeEmail ?? biometricEmail ?? null;
+
   // Autoprompt biometrico: 1 solo tentativo totale per sessione.
+  // Ora funziona anche se siamo sulla schermata EMAIL, usando autoPromptEmail.
   useEffect(() => {
-    if (!activeEmail) return;
+    if (!autoPromptEmail) return;
     if (!bioSupported || !bioEnabled) return;
     if (autoStartedRef.current) return;
     if (hasAutoPromptLock()) return;
@@ -122,7 +156,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         setBioBusy(false);
         if (ok) {
           clearBiometricSnooze();
-          onLoginSuccess('biometric-local', activeEmail);
+
+          const normalized = autoPromptEmail.toLowerCase();
+
+          // Salva email biometrica dedicata
+          try {
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem(BIOMETRIC_LAST_EMAIL_KEY, normalized);
+            }
+          } catch {}
+
+          // Se eravamo sulla schermata email, settiamo anche l'activeEmail
+          if (!activeEmail) {
+            setActiveEmail(normalized);
+          }
+
+          onLoginSuccess('biometric-local', normalized);
         }
       } catch (err: any) {
         setBioBusy(false);
@@ -131,10 +180,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         if (name === 'NotAllowedError' || name === 'AbortError' || /timeout/i.test(msg)) {
           setBiometricSnooze();
         }
-        // resta sulla schermata PIN
+        // resta sulla schermata corrente
       }
     })();
-  }, [activeEmail, bioSupported, bioEnabled, onLoginSuccess]);
+  }, [autoPromptEmail, activeEmail, bioSupported, bioEnabled, onLoginSuccess, setActiveEmail]);
 
   // Verifica PIN
   useEffect(() => {
@@ -146,8 +195,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
   const handleEmailSubmit = (email: string) => {
     if (email) {
-      setActiveEmail(email.toLowerCase());
+      const normalized = email.toLowerCase();
+      setActiveEmail(normalized);
       setError(null);
+      setBiometricEmail(normalized);
     }
   };
 
@@ -169,10 +220,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   const loginWithBiometrics = async () => {
-    if (!activeEmail) return;
+    const emailForBio = activeEmail ?? biometricEmail;
+    if (!emailForBio) return;
+
     try {
       setBioBusy(true);
-      const { clearBiometricSnooze, setBiometricSnooze } =
+      const { clearBiometricSnoozed, clearBiometricSnooze, setBiometricSnooze } =
         (await import('../services/biometrics')) as unknown as BioHelpers;
 
       // login richiesto esplicitamente → azzero lo snooze
@@ -182,7 +235,21 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       setBioBusy(false);
 
       if (ok) {
-        onLoginSuccess('biometric-local', activeEmail);
+        const normalized = emailForBio.toLowerCase();
+
+        // salva anche qui la mail biometrica
+        try {
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(BIOMETRIC_LAST_EMAIL_KEY, normalized);
+          }
+        } catch {}
+
+        if (!activeEmail) {
+          setActiveEmail(normalized);
+        }
+        setBiometricEmail(normalized);
+
+        onLoginSuccess('biometric-local', normalized);
       }
     } catch (err) {
       setBioBusy(false);
@@ -198,13 +265,28 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   const enableBiometricsNow = async () => {
-    if (!activeEmail) return;
+    const emailForBio = activeEmail ?? biometricEmail;
+    if (!emailForBio) return;
+
     try {
       setBioBusy(true);
-      // registra credenziali biometriche per questo profilo
       await registerBiometric('Profilo locale');
       setBioEnabled(true);
       setBioBusy(false);
+
+      const normalized = emailForBio.toLowerCase();
+
+      // salva email biometrica dedicata
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(BIOMETRIC_LAST_EMAIL_KEY, normalized);
+        }
+      } catch {}
+
+      if (!activeEmail) {
+        setActiveEmail(normalized);
+      }
+      setBiometricEmail(normalized);
 
       // Tentativo manuale subito dopo l’abilitazione
       await loginWithBiometrics();
@@ -215,10 +297,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   const optOutBiometrics = () => {
-    if (!activeEmail) return;
     try {
-      // FIX: setBiometricsOptOut expects a boolean argument. Passing true will opt the user out.
-      // Also, the function is not async, so `await` is not needed.
+      // funzione definita come setBiometricsOptOut(boolean)
       setBiometricsOptOut(true);
     } catch {
       // se fallisce non è la fine del mondo
@@ -231,7 +311,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     setPin('');
     setError(null);
     autoStartedRef.current = false;
-    // non resetto il lock: niente altro auto-prompt in questa sessione
+    // non resetto il lock globale: niente altro auto-prompt in questa sessione
   };
 
   const renderContent = () => {
