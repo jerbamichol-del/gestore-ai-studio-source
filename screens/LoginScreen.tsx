@@ -79,7 +79,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         } else if (activeEmail) {
           // decide se proporre l'abilitazione per questo utente
           try {
-            const offer = await shouldOfferBiometricEnable(activeEmail);
+            // FIX: The function `shouldOfferBiometricEnable` does not take any arguments.
+            const offer = await shouldOfferBiometricEnable();
             shouldShow = offer;
           } catch {
             shouldShow = false;
@@ -213,10 +214,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
-  const optOutBiometrics = async () => {
+  const optOutBiometrics = () => {
     if (!activeEmail) return;
     try {
-      await setBiometricsOptOut(activeEmail);
+      // FIX: setBiometricsOptOut expects a boolean argument. Passing true will opt the user out.
+      // Also, the function is not async, so `await` is not needed.
+      setBiometricsOptOut(true);
     } catch {
       // se fallisce non è la fine del mondo
     }
