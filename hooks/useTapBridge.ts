@@ -98,7 +98,7 @@ export function useTapBridge(opts: Options = {}) {
   const onClickCapture = useCallback((e: React.MouseEvent) => {
     const state = stateRef.current;
 
-    if (state.suppressNextClick && e.isTrusted) {
+    if (e.isTrusted && state.suppressNextClick) {
       e.preventDefault();
       e.stopPropagation();
       state.suppressNextClick = false;
