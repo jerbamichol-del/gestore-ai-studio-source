@@ -1,3 +1,4 @@
+// ExpenseForm.tsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Expense, Account, CATEGORIES } from '../types';
 import { XMarkIcon } from './icons/XMarkIcon';
@@ -13,6 +14,7 @@ import { CalendarDaysIcon } from './icons/CalendarDaysIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { formatDate } from './icons/formatters';
 import ConfirmationModal from './ConfirmationModal';
+import { useTapBridge } from '../hooks/useTapBridge';
 
 
 interface ExpenseFormProps {
@@ -165,6 +167,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
   const amountInputRef = useRef<HTMLInputElement>(null);
   const descriptionInputRef = useRef<HTMLInputElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const tapBridgeHandlers = useTapBridge();
 
   const isEditing = !!initialData;
   const isSingleRecurring = formData.frequency === 'recurring' && formData.recurrenceEndType === 'count' && formData.recurrenceCount === 1;
@@ -197,7 +200,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
   
   const forceClose = () => {
     setIsAnimating(false);
-    setTimeout(onClose, 300);
+    setTimeout(onClose, 80);
   };
   
   const handleClose = () => {
@@ -249,7 +252,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
       
       const closableTimer = setTimeout(() => {
         setIsClosableByBackdrop(true);
-      }, 300);
+      }, 80);
       
       return () => {
         clearTimeout(animTimer);
@@ -477,7 +480,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
   const frequencyOptions = [
     { value: 'none', label: 'Nessuna' },
     { value: 'single', label: 'Singolo' },
-    { value: 'recurring', label: 'Ricorrente' },
+    { value: 'recurring', label: 'Programmata' },
   ];
 
   const isSubcategoryDisabled = !formData.category || formData.category === 'Altro' || subcategoryOptions.length === 0;
@@ -512,7 +515,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
     const getRecurrenceEndLabel = () => {
     const { recurrenceEndType } = formData;
     if (!recurrenceEndType || recurrenceEndType === 'forever') return 'Per sempre';
-    if (recurrenceEndType === 'date') return 'Fino a';
+    if (recurrenceEndType === 'date') return 'Fino a...';
     if (recurrenceEndType === 'count') return 'Numero di volte';
     return 'Per sempre';
   };
@@ -522,15 +525,16 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
   
   return (
     <div
-      className={`fixed inset-0 z-[51] transition-opacity duration-300 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'} bg-slate-900/60 backdrop-blur-sm`}
+      className={`fixed inset-0 z-[51] transition-opacity duration-75 ease-in-out ${isAnimating ? 'opacity-100' : 'opacity-0'} bg-slate-900/60 backdrop-blur-sm`}
       onClick={handleBackdropClick}
       aria-modal="true"
       role="dialog"
     >
       <div
-        className={`bg-slate-50 w-full h-full flex flex-col absolute bottom-0 transform transition-transform duration-300 ease-in-out ${isAnimating ? 'translate-y-0' : 'translate-y-full'}`}
+        className={`bg-slate-50 w-full h-full flex flex-col absolute bottom-0 transform transition-transform duration-75 ease-in-out ${isAnimating ? 'translate-y-0' : 'translate-y-full'}`}
         onClick={(e) => e.stopPropagation()}
         style={{ touchAction: 'pan-y' }}
+        {...tapBridgeHandlers}
       >
         <header className="flex justify-between items-center p-6 border-b border-slate-200 flex-shrink-0">
           <h2 ref={titleRef} tabIndex={-1} className="text-2xl font-bold text-slate-800 focus:outline-none">{isEditing ? 'Modifica Spesa' : 'Aggiungi Spesa'}</h2>
@@ -650,7 +654,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
                             className="w-full flex items-center justify-between text-left gap-2 px-3 py-2.5 text-base rounded-lg border shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors bg-white border-slate-300 text-slate-800 hover:bg-slate-50"
                         >
                           <span className="truncate flex-1 capitalize">
-                            {isSingleRecurring ? 'Singolo' : formData.frequency !== 'recurring' ? 'Nessuna' : 'Ricorrente'}
+                            {isSingleRecurring ? 'Singolo' : formData.frequency !== 'recurring' ? 'Nessuna' : 'Programmata'}
                           </span>
                           <ChevronDownIcon className="w-5 h-5 text-slate-500" />
                         </button>
@@ -778,7 +782,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ isOpen, onClose, onSubmit, in
                         <span className="truncate flex-1 capitalize">{getRecurrenceEndLabel()}</span>
                         <ChevronDownIcon className={`w-5 h-5 text-slate-500 transition-transform ${isRecurrenceEndOptionsOpen ? 'rotate-180' : ''}`} />
                     </button>
-                     {isRecurrenceEndOptionsOpen && (<div className="absolute top-full mt-1 w-full bg-white border border-slate-200 shadow-lg rounded-lg z-10 p-2 space-y-1 animate-fade-in-down">{(['forever', 'date', 'count'] as const).map(key => (<button key={key} onClick={() => handleRecurrenceEndTypeSelect(key)} className="w-full text-left px-4 py-3 text-base font-semibold rounded-lg transition-colors bg-slate-50 text-slate-800 hover:bg-indigo-100 hover:text-indigo-800">{key === 'forever' ? 'Per sempre' : key === 'date' ? 'Fino a' : 'Numero di volte'}</button>))}</div>)}
+                     {isRecurrenceEndOptionsOpen && (<div className="absolute top-full mt-1 w-full bg-white border border-slate-200 shadow-lg rounded-lg z-10 p-2 space-y-1 animate-fade-in-down">{(['forever', 'date', 'count'] as const).map(key => (<button key={key} onClick={() => handleRecurrenceEndTypeSelect(key)} className="w-full text-left px-4 py-3 text-base font-semibold rounded-lg transition-colors bg-slate-50 text-slate-800 hover:bg-indigo-100 hover:text-indigo-800">{key === 'forever' ? 'Per sempre' : key === 'date' ? 'Fino a...' : 'Numero di volte'}</button>))}</div>)}
                   </div>
                   {formData.recurrenceEndType === 'date' && (<div className="animate-fade-in-up"><label htmlFor="recurrence-end-date" className="relative w-full flex items-center justify-center gap-2 px-3 py-2.5 text-base rounded-lg focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500 text-indigo-600 hover:bg-indigo-100 font-semibold cursor-pointer h-[46.5px]"><CalendarIcon className="w-5 h-5"/><span>{formData.recurrenceEndDate ? formatDate(parseLocalYYYYMMDD(formData.recurrenceEndDate)!) : 'Seleziona'}</span><input type="date" id="recurrence-end-date" name="recurrenceEndDate" value={formData.recurrenceEndDate || ''} onChange={(e) => setFormData(prev => ({...prev, recurrenceEndDate: e.target.value, recurrenceEndType: 'date' }))} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"/></label></div>)}
                   {formData.recurrenceEndType === 'count' && (<div className="animate-fade-in-up"><div className="relative"><input type="number" id="recurrence-count" name="recurrenceCount" value={formData.recurrenceCount || ''} onChange={handleInputChange} className="block w-full text-center rounded-md border border-slate-300 bg-white py-2.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-base" placeholder="N." min="1"/></div></div>)}
